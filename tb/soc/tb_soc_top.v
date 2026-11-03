@@ -35,12 +35,6 @@ reg         rstn;           // Interconnect & IPs reset (active-low)
 reg  [31:1] rst_vec;        // Reset vector (0x8000_0000 >> 1 = 31'h4000_0000)
 reg         nmi_int;
 reg  [31:1] nmi_vec;
-reg  [31:1] jtag_id;
-
-reg         jtag_tck;
-reg         jtag_tms;
-reg         jtag_tdi;
-wire        jtag_tdo;
 
 // Peripherals
 reg         uart_rx_i;
@@ -82,12 +76,6 @@ soc_top #(
     .rst_vec        (rst_vec),
     .nmi_int        (nmi_int),
     .nmi_vec        (nmi_vec),
-    .jtag_id        (jtag_id),
-
-    .jtag_tck       (jtag_tck),
-    .jtag_tms       (jtag_tms),
-    .jtag_tdi       (jtag_tdi),
-    .jtag_tdo       (jtag_tdo),
 
     .uart_rx_i      (uart_rx_i),
     .uart_tx_o      (uart_tx_o),
@@ -132,10 +120,6 @@ initial begin
     rst_vec        = 31'h4000_0000;   // 0x8000_0000 >> 1
     nmi_int        = 1'b0;
     nmi_vec        = 31'h0;
-    jtag_id        = 31'h1;
-    jtag_tck       = 1'b0;
-    jtag_tms       = 1'b1;            // JTAG held in Test-Logic-Reset
-    jtag_tdi       = 1'b0;
     uart_rx_i      = 1'b1;            // UART idle high
     spi_miso_i     = 1'b0;
     gpio_in_i      = 8'h00;

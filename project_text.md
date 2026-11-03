@@ -318,3 +318,347 @@ The testbench ([`tb/soc/tb_soc_top.v`](file:///home/student/Documents/Honours_Pr
 
 ### 8.5 Verification Confirmation
 Every stage of this architecture is **fully implemented in Verilog/SystemVerilog, compiled into the SoC top (`soc_top.v`), and 100% verified in Synopsys VCS simulation**.
+
+
+---
+
+## 9. Engineering Session Record (31 October 2026) — Verification Test Plan Expansion & Architectural Clarifications
+
+### 9.1 Verification Test Plan Restructuring
+Following architectural review and comparison against industry reference templates ([`Cryptographic_Telemetry_Gateway_SoC_Testplan.xlsx`](file:///C:/Users/PC/Downloads/Cryptographic_Telemetry_Gateway_SoC_Testplan.xlsx)), the formal verification test plan was significantly expanded and upgraded:
+
+1. **Boundary Scope Segregation:**
+   - Evaluated all 27 SoC test cases against physical chip silicon boundaries (I/O pads vs. on-chip buses).
+   - Added discrete classification for **Control Path (Internal/External)** and **Data Path (Internal/External)**.
+2. **Standardized Reference Formatting:**
+   - Adopted the exact 9-column and 10-column layout of the corporate reference template.
+   - Header Row: Row height `28.0` pt, Navy Blue fill (`#1F4E78`), Arial 11pt Bold, White font.
+   - Data Rows: Uniform row height `68.0` pt, Arial 10pt regular font, `#D9D9D9` thin borders.
+   - Custom column widths matching reference: `SNo.` (7.0), `Testname` (15.0), `Description` (42.0), `Checkpoint` (35.0), `C verification part` (50.0), `SV verification part` (50.0), `Control Path` (24.0), `Data Path` (24.0), `Internal Test` (46.0), `External Test` (46.0).
+3. **Artifacts Generated on Disk:**
+   - Safety backup of original test plan: [`soc_test_plan_backup.xlsx`](file:///C:/Users/PC/Downloads/soc_test_plan_backup.xlsx)
+   - 9-Column Reference Matched: [`soc_test_plan_reference_matched.xlsx`](file:///C:/Users/PC/Downloads/soc_test_plan_reference_matched.xlsx)
+   - 10-Column Comprehensive (Control + Data Path): [`soc_test_plan_with_control_and_data_path.xlsx`](file:///C:/Users/PC/Downloads/soc_test_plan_with_control_and_data_path.xlsx)
+
+---
+
+### 9.2 The 27-Test Classification Matrix (Control Path, Data Path & External Interface)
+
+| SNo. | Test Name | Control Path | Data Path | External Interface | Summary Rationale |
+| :---: | :--- | :---: | :---: | :---: | :--- |
+| **1** | `TC_BOOT_01` | **External $\rightarrow$ Internal** | **External $\rightarrow$ Internal** | **Reset / System (`rst_l`, `rstn`, `rst_vec`)** | Reset asserted by TB via external pins; CPU IFU wakes up, fetches code from Boot ROM, and initializes `sp` in DCCM. |
+| **2** | `TC_BOOT_02` | **Internal** | **Internal** | **N/A (On-Chip DCCM Only)** | Core LSU generates internal read/write strobes; test patterns stay inside local DCCM SRAM. |
+| **3** | `TC_MEM_01` | **Internal** | **Internal** | **N/A (On-Chip Core CSR Only)** | `csrw 0x7C0, t0` updates internal MRAC register; memory attribute decode logic alters region 0 caching. |
+| **4** | `TC_UART_01` | **Internal** | **Internal** | **N/A (On-Chip AXI Register Setup)** | AXI handshakes configure baud rate and line control registers inside the UART IP; no serial line toggles. |
+| **5** | `TC_UART_02` | **Internal & External** | **Internal $\rightarrow$ External** | **UART (`uart_tx_o` pin, 115200 baud)** | CPU polls internal `THRE` flag; baud clock serializes ASCII banner bytes out through physical **`uart_tx_o` pin**. |
+| **6** | `TC_UART_03` | **External & Internal** | **External $\rightarrow$ Internal** | **UART (`uart_rx_i` pin, 115200 baud)** | External start bit falling edge on **`uart_rx_i`** initiates frame; deserialized byte read by CPU over internal AXI. |
+| **7** | `TC_UART_04` | **External & Internal** | **External & Internal** | **UART (`uart_rx_i` pin)** | Consecutive unread byte injections on **`uart_rx_i`** trigger Overrun Error (`OE`) flag in internal LSR. |
+| **8** | `TC_TMR_01` | **Internal** | **Internal** | **N/A (On-Chip Timer Only)** | Internal prescaler divides system clock; monotonic 64-bit counter value read over internal AXI crossbar. |
+| **9** | `TC_TMR_02` | **Internal & External** | **Internal** | **Timer Interrupt (`timer_irq_o` pin)** | Comparator match raises internal interrupt and asserts top-level pin **`timer_irq_o`**; W1C clears interrupt. |
+| **10** | `TC_AES_01` | **Internal** | **Internal** | **N/A (On-Chip AES Register Bank)** | CPU writes 128-bit AUTOSAR key across internal AXI bus into on-chip `KEY0..3` registers. |
+| **11** | `TC_AES_02` | **Internal** | **Internal** | **N/A (On-Chip Hardware Accelerator)** | `START` bit triggers 10-round autonomous hardware FSM (`IDLE` $\rightarrow$ `ROUND_1..10` $\rightarrow$ `DONE`) entirely on-chip. |
+| **12** | `TC_AES_03` | **Internal** | **Internal** | **N/A (On-Chip AXI Bus Readback)** | 128-bit ciphertext read from on-chip `TEXTOUT0..3` registers into CPU registers over AXI crossbar. |
+| **13** | `TC_AES_04` | **Internal** | **Internal** | **N/A (On-Chip Slave Logic)** | While `BUSY` is active, write-protection logic blocks write-enable strobes, preserving internal cipher state. |
+| **14** | `TC_SRAM_01` | **Internal** | **Internal** | **N/A (On-Chip 64KB AXI SRAM)** | 128-bit ECU sensor plaintext payload staged into on-chip 64 KB AXI SRAM buffer (`0x0600_0000`). |
+| **15** | `TC_SRAM_02` | **Internal** | **Internal** | **N/A (On-Chip 64KB AXI SRAM)** | Ciphertext written from CPU registers to on-chip SRAM staging buffer at offset `+0x10` (`0x0600_0010`). |
+| **16** | `TC_DMA_01` | **Internal** | **Internal** | **N/A (On-Chip AXI Crossbar S01)** | DMA Master S01 autonomously streams 16-byte burst between SRAM and peripheral over on-chip crossbar. |
+| **17** | `TC_DMA_02` | **Internal & External** | **Internal** | **DMA Interrupt (`dma_error_o` pin)** | AXI decoder returns `DECERR` on unmapped access; aborts DMA and asserts physical pin **`dma_error_o`**. |
+| **18** | `TC_SPI_01` | **Internal** | **Internal** | **N/A (On-Chip SPI Register Setup)** | SPI control register and clock divisor (`clk/4`) configured over internal AXI bus; SPI bus remains idle. |
+| **19** | `TC_SPI_02` | **Internal & External** | **Internal $\rightarrow$ External** | **SPI (`spi_mosi_o`, `spi_sclk_o`, `spi_cs_n_o` to MCP2515 CAN)** | SPI FSM drives **`spi_cs_n_o = 0`**, toggles **`spi_sclk_o`**, and streams 16 ciphertext bytes out on **`spi_mosi_o`** to MCP2515 CAN chip. |
+| **20** | `TC_GPIO_01` | **Internal & External** | **Internal $\rightarrow$ External** | **GPIO (`gpio_out_o[0]` Status LED 0)** | CPU writes GPIO direction/data; output driver asserts physical pad **`gpio_out_o[0]`** to turn on Status LED 0. |
+| **21** | `TC_GPIO_02` | **Internal & External** | **Internal $\rightarrow$ External** | **GPIO (`gpio_out_o[1:0]` Status LEDs)** | CPU updates GPIO data; output pads assert **`gpio_out_o[1:0]`** (0x03) to signal active hardware AES encryption. |
+| **22** | `TC_GPIO_03` | **Internal & External** | **Internal $\rightarrow$ External** | **GPIO (`gpio_out_o[2:0]` Status LEDs)** | CPU updates GPIO data; output pads assert **`gpio_out_o[2:0]`** (0x07) to signal active SPI serial dispatch. |
+| **23** | `TC_GPIO_04` | **Internal & External** | **Internal $\rightarrow$ External** | **GPIO (`gpio_out_o[7:0]` Status LEDs)** | CPU writes 0x05; pads drive **`gpio_out_o[7:0]`** to reflect verified end-to-end transaction success. |
+| **24** | `TC_GPIO_05` | **External $\rightarrow$ Internal** | **External $\rightarrow$ Internal** | **GPIO (`gpio_in_i[7:4]` Input Pins)** | External stimulus on **`gpio_in_i[7:4]`** passes through 2-stage synchronizers; CPU reads stable nibble via AXI. |
+| **25** | `TC_BUS_01` | **Internal** | **Internal** | **N/A (On-Chip Interconnect)** | Interconnect arbiter grants master requests (S00/S01), enforces single-beat `m02_rlast = 1`, and routes 7 slaves. |
+| **26** | `TC_BUS_02` | **Internal** | **Internal** | **N/A (On-Chip Interconnect)** | Unmapped address decoder asserts `DECERR` on response channel; CPU catches precise bus fault trap on-chip. |
+| **27** | `TC_E2E_01` | **Internal & External** | **Internal & External** | **Multi-Interface (UART + SPI MCP2515 + GPIO LEDs)** | Full flow: on-chip boot, SRAM staging, AES encryption + off-chip UART telemetry, SPI CAN stream, and GPIO status LEDs. |
+
+---
+
+## 10. In-Depth Architectural & Technical Foundations (Answers to Core Engineering Queries)
+
+### 10.1 Control Path vs. Data Path: Deep-Dive Architectural Clarification
+
+#### Fundamental Concept
+In modern SoC architectures, digital hardware is fundamentally divided into two complementary subsystems:
+* **The Data Path (The Muscle):** The wires, multiplexers, ALUs, memory arrays, and shift registers that store, route, and transform actual data values (e.g., plaintext sensor frames, 128-bit cryptographic keys, ciphertext blocks, and ASCII characters).
+* **The Control Path (The Brain / Conductor):** The finite state machines (FSMs), decoder gates, valid/ready handshake signals, status flags, and interrupt lines that determine *when*, *where*, and *how* data moves. The control path does not manipulate payload data; it controls multiplexer select lines, clock gates, register write-enables, and bus handshakes.
+
+```
+ ┌───────────────────────────────────────────────────────────────┐
+ │               Layer 1: VeeR EL2 CPU Control Path              │
+ │   • PC Sequencing & Branch Logic    • LSU Address Decoders    │
+ │   • Instruction Decode & Opcodes    • MRAC CSR 0x7C0 Control  │
+ └───────────────────────────────┬───────────────────────────────┘
+                                 │ AXI4 Master Transactions
+                                 ▼
+ ┌───────────────────────────────────────────────────────────────┐
+ │         Layer 2: AXI4 Crossbar Interconnect Control           │
+ │   • 5-Channel VALID/READY Handshakes  • Arbiter (S00 vs S01)  │
+ │   • Address Slot Decoder (M00-M06)    • Single-beat RLAST=1   │
+ └───────────────────────────────┬───────────────────────────────┘
+                                 │ Peripheral Register Strobes
+                                 ▼
+ ┌───────────────────────────────────────────────────────────────┐
+ │             Layer 3: Peripheral FSMs & IP Control             │
+ │   • AES 10-Round Sequencer (START/BUSY/DONE)                  │
+ │   • SPI Serializer Shift FSM (CS_N assertion & SCLK timing)   │
+ │   • UART Baud Counter & FIFO Overrun Logic (THRE, DR, OE)     │
+ │   • Timer Auto-reload & Match Comparator (ICR W1C)            │
+ │   • DMA Burst Control Engine (GO, ABORT, Address Increment)   │
+ └───────────────────────────────┬───────────────────────────────┘
+                                 │ Interrupt Events
+                                 ▼
+ ┌───────────────────────────────────────────────────────────────┐
+ │            Layer 4: Interrupt & Status Feedback               │
+ │   • 5-line hardware IRQ vector to VeeR extintsrc_req[5:1]     │
+ │   • GPIO Status LEDs (0x01 -> 0x03 -> 0x07 -> 0x05)           │
+ └───────────────────────────────────────────────────────────────┘
+```
+
+#### Layer-by-Layer Decomposition in this SoC
+1. **Layer 1: CPU Core Pipeline Control (VeeR EL2):**
+   - **Reset & IFU:** On reset release (`rst_l=1`), the Instruction Fetch Unit begins fetching instructions from vector `0x8000_0000`.
+   - **MRAC CSR `0x7C0`:** Configures peripheral space (`0x0000_0000`–`0x0FFF_FFFF`) as non-cacheable side-effect I/O, preventing speculative reads or doubleword merges.
+   - **LSU Address Checking:** Decodes memory addresses to determine whether requests target internal DCCM (`0xF004_0000`), Boot ROM (`0x8000_0000`), or the external AXI interconnect.
+2. **Layer 2: AXI4 Interconnect Two-Way Handshake Protocol:**
+   - Every bus transaction requires strict 2-way handshakes:
+     - Write Address: `AWVALID` / `AWREADY`
+     - Write Data: `WVALID` / `WREADY` with byte strobes `WSTRB`
+     - Write Response: `BVALID` / `BREADY` (`2'b00` OKAY, `2'b10` SLVERR, `2'b11` DECERR)
+     - Read Address: `ARVALID` / `ARREADY`
+     - Read Data: `RVALID` / `RREADY` with burst termination `RLAST = 1'b1`
+   - Slot decoding routes addresses `0x00..` to AES, `0x01..` to DMA, `0x02..` to SPI, `0x03..` to UART, `0x04..` to Timer, `0x05..` to GPIO, and `0x06..` to SRAM.
+   - Round-robin arbiter handles contention between CPU LSU (Master S00) and DMA (Master S01).
+3. **Layer 3: Peripheral Finite State Machines (FSMs):**
+   - **AES-128 FSM:** Advances across 10 rounds (`IDLE` $\rightarrow$ `ROUND_1..10` $\rightarrow$ `DONE`). Asserts `BUSY=1` to write-protect KEY and TEXTIN registers; asserts `DONE=1` upon ciphertext completion.
+   - **SPI Master FSM:** Divides clock (`clk/4`), asserts active-low `spi_cs_n_o = 0`, clocks `spi_sclk_o`, serializes 8 bits per byte, and asserts `TX_READY`.
+   - **16550 UART FSM:** Baud divider down-counter divides 100 MHz clock by 868 ($115,200\text{ baud}$). Manages FIFO pointers and asserts `THRE` (TX holding empty), `DR` (data ready), or `OE` (overrun error).
+   - **Timer FSM:** Down-counter with auto-reload, asserting `timer_irq_o` upon match; cleared via W1C in `ICR`.
+   - **DMA Controller FSM:** Coordinates burst addresses, counts transfer bytes, asserts `dma_done_o`, or halts on `DECERR` with `dma_error_o`.
+   - **GPIO 2-Stage Synchronizers:** Mitigates metastability on asynchronous external inputs (`gpio_in_i`).
+4. **Layer 4: Global Interrupt & Event Routing Network:**
+   - Five dedicated hardware interrupt lines route directly to VeeR core `extintsrc_req[5:1]`:
+     - Line 1: `timer_irq_o` (heartbeat tick)
+     - Line 2: `uart_irq_o` (RX byte available)
+     - Line 3: `gpio_irq_o` (pin edge transition)
+     - Line 4: `dma_done_o` (burst complete)
+     - Line 5: `dma_error_o` (bus decode fault)
+
+#### Safety-Critical Importance of Control Path in Automotive Gateways
+* **Deadlock Prevention:** Hardware must guarantee that dropped handshakes or missing `RLAST` signals never lock up the AXI arbiter. Unmapped address access returns `DECERR` gracefully.
+* **Cryptographic Write-Protection:** While the AES engine is in the `BUSY` state, internal control gates reject external bus write strobes, ensuring in-flight cipher states cannot be corrupted.
+* **Deterministic Execution:** Hardware state machines execute AES-128 in exactly 10 clock cycles ($100\text{ ns}$ at $100\text{ MHz}$), meeting strict automotive microsecond latency deadlines that software loops cannot satisfy.
+
+---
+
+### 10.2 Why Tests Have Both Internal and External Classifications
+
+#### The Physical Concept of the SoC Boundary
+An embedded SoC is a physical silicon die inside an integrated circuit (IC) package placed on a circuit board:
+* **Internal (On-Chip):** Everything fabricated within the silicon die — the CPU core, ICCM/DCCM SRAMs, AXI crossbar, AES engine, and staging SRAM.
+* **External (Off-Chip):** Everything outside the silicon die — external PCB traces, the physical MCP2515 CAN transceiver, status LEDs, and testbench drivers.
+* **The Boundary:** The physical I/O pads and pins of the chip (`uart_tx_o`, `uart_rx_i`, `spi_mosi_o`, `gpio_out_o`, `rstn`).
+
+#### The 4 Boundary Traversal Scenarios
+
+```
+1. PURELY INTERNAL:
+   CPU / SRAM ────────(On-Chip AXI Crossbar)────────► AES Accelerator
+   (No physical external pins are toggled; 100% on-chip verification)
+
+2. INTERNAL -> EXTERNAL:
+   CPU / SRAM ────► Peripheral FIFO ────► Physical Pad ────► External World
+   (e.g., SPI ciphertext stream on spi_mosi_o or UART banner on uart_tx_o)
+
+3. EXTERNAL -> INTERNAL:
+   External World ────► Physical Pad ────► Peripheral FIFO ────► CPU / AXI
+   (e.g., Injected sensor byte on uart_rx_i or stimulus on gpio_in_i)
+
+4. INTERNAL & EXTERNAL (Event / Interrupt):
+   Internal Event (Timer Match / DMA Fault) ────► Physical IRQ Pin
+   (e.g., timer_irq_o or dma_error_o sampled by external testbench monitor)
+```
+
+1. **Purely Internal (`Internal: Yes` | `External: No`):**
+   - **Example: `TC_AES_02` (Hardware AES Encryption):**  
+     Plaintext moves over the internal AXI bus $\rightarrow$ hardware engine computes 10 rounds $\rightarrow$ CPU reads ciphertext back over internal AXI into internal registers. Zero external pins toggle; an oscilloscope attached to chip pins sees no activity.
+   - **Other examples:** `TC_BOOT_02` (DCCM stack integrity), `TC_MEM_01` (MRAC CSR), `TC_SRAM_01` (SRAM staging).
+2. **Internal $\rightarrow$ External (`Both: Internal & External`):**
+   - **Example: `TC_SPI_02` (16-Byte CAN Frame Dispatch):**  
+     The CPU loads ciphertext from internal SRAM and writes it to internal `SPI_DATA_REG` (**Internal**). The SPI controller shifts the bits across physical pads `spi_cs_n_o`, `spi_sclk_o`, and `spi_mosi_o` to the off-chip MCP2515 CAN chip (**External**). Both domains must be verified to prove the gateway works.
+   - **Other examples:** `TC_UART_02` (ASCII banner streaming on `uart_tx_o`), `TC_GPIO_01`–`04` (driving status LEDs on `gpio_out_o`).
+3. **External $\rightarrow$ Internal (`Both: External & Internal`):**
+   - **Example: `TC_UART_03` (Sensor Data Ingress):**  
+     Testbench bit-bangs serial bytes into physical pad `uart_rx_i` (**External**). The UART receiver deserializes the byte into the internal RX FIFO, where the CPU reads it over the AXI bus (**Internal**).
+   - **Other examples:** `TC_BOOT_01` (external active-low reset pins waking internal CPU), `TC_GPIO_05` (external switch stimulus on `gpio_in_i` sampled through synchronizers).
+4. **Internal with External Status / Interrupt (`Internal & External`):**
+   - **Example: `TC_TMR_02` (Timer Interrupt):** Counter matches compare value internally; asserts physical pin `timer_irq_o` at the SoC boundary for external observation.
+   - **Example: `TC_DMA_02` (DMA Fault):** Decode error aborts DMA internally; asserts top-level pin `dma_error_o`.
+
+---
+
+### 10.3 From Where Does the CPU Load Data? (Complete Memory Architecture Mapping)
+
+In this SoC, the VeeR EL2 CPU core does not load from a single monolithic memory. Depending on the type of data, it loads from **four distinct physical memory locations**:
+
+```
+                       ┌───────────────────────────────────────────────┐
+                       │             VeeR EL2 RISC-V Core              │
+                       │                                               │
+                       │   ┌─────────────────────┐ ┌───────────────┐   │
+                       │   │ Instruction Fetch   │ │  Load/Store   │   │
+                       │   │ Unit (IFU)          │ │  Unit (LSU)   │   │
+                       │   └──────────┬──────────┘ └───────┬───────┘   │
+                       └──────────────┼────────────────────┼───────────┘
+                                      │                    │
+              ┌───────────────────────┴────────┐           │
+              │ IFU AXI (0x8000_0000)          │           │
+              ▼                                │           │
+  ┌───────────────────────┐                    │           │
+  │     Boot ROM          │ ◄──────────────────┼───────────┘ (LSU loads .rodata constants)
+  │  (ifu_rom_stub.v)     │   lsu_ar_is_rom    │
+  │   @ 0x8000_0000       │   (0x8000_0000)    │
+  └───────────────────────┘                    │
+                                               │
+  ┌───────────────────────┐                    │
+  │     Internal DCCM     │ ◄──────────────────┤ (Direct single-cycle fast stack access)
+  │   @ 0xF004_0000       │                    │
+  └───────────────────────┘                    │
+                                               │ LSU Master S00
+                                               ▼
+                                  ═══════════════════════════════
+                                      AXI4 Interconnect (2x8)
+                                  ═══════════════════════════════
+                                     │                         │
+                                     ▼ M06                     ▼ M00 / M03
+                          ┌─────────────────────┐   ┌──────────────────────┐
+                          │    AXI Staging      │   │ Peripheral Registers │
+                          │       SRAM          │   │  • AES Ciphertext    │
+                          │   @ 0x0600_0000     │   │  • UART RX Bytes     │
+                          └─────────────────────┘   └──────────────────────┘
+```
+
+#### 1. Boot ROM (`0x8000_0000`) — Instructions & Static Constants
+* **What is loaded:**
+  * **Executable instructions** (compiled `boot.S` and `main.c`).
+  * **Static constants** (`.rodata`), specifically the 128-bit key (`nist_key[4]`) and default ECU plaintext (`ecu_plaintext[4]`).
+* **Hardware access path:**
+  * Preloaded with `boot.hex` at simulation start via `$readmemh`.
+  * The IFU fetches instructions across `ifu_axi_*`.
+  * When the CPU executes `lw` (load word) on `nist_key` or `ecu_plaintext`, the LSU steers the read address directly to Port B of `ifu_rom_stub` using:
+    ```verilog
+    wire lsu_ar_is_rom = (lsu_axi_araddr[31:28] == 4'h8);
+    ```
+    *(Refer to [`soc_top.v#L272`](file:///home/student/Documents/Honours_Proj_github/rtl/soc_top/soc_top.v#L272))*
+
+#### 2. DCCM (Data Closely Coupled Memory) (`0xF004_0000`) — Stack & Local Variables
+* **What is loaded:**
+  * Local function variables, call stack frames, caller/callee saved registers (`ra`, `s0`–`s11`), and loop counter `heartbeat`.
+* **Hardware access path:**
+  * 64 KB single-cycle SRAM embedded **directly inside the VeeR core**.
+  * Addresses in `0xF004_xxxx` do **not** touch the AXI bus; the core's internal LSU accesses the memory cells with zero wait-states.
+
+#### 3. AXI SRAM Staging Memory (`0x0600_0000`) — Frame Buffer
+* **What is loaded:**
+  * Staged plaintext payload (`0x0600_0000`–`0x0600_000C`).
+  * Encrypted ciphertext (`0x0600_0010`–`0x0600_001C`).
+* **Hardware access path:**
+  * Loaded by the CPU LSU across the **AXI4 crossbar via Slave Port M06** (`u_sram` in `axi_interconnect_uart_top.v`).
+  * Serves as the central mailbox/staging buffer between CPU, AES accelerator, and SPI CAN controller.
+
+#### 4. Hardware Peripheral Registers — External & Accelerated Data
+* **AES-128 Ciphertext (`0x0000_0024`–`0x0000_0030`):** Read from `AES_TEXTOUT0_REG`–`AES_TEXTOUT3_REG` over AXI crossbar Port M00 once `DONE=1`.
+* **UART Ingress Data (`0x0300_0000`):** Incoming bytes read from `UART_RBR_REG` (Port M03) after reception on physical pin `uart_rx_i`.
+* **Peripheral Status Flags:** Polled via AXI reads (`UART_LSR_REG` for `THRE`/`DR`, `SPI_STATUS_REG` for transfer complete, `AES_CSR_REG` for `DONE`).
+
+---
+
+### 📌 Summary Address Map
+
+| Data Type | Physical Memory Device | Address Range | Access Path |
+| :--- | :--- | :---: | :--- |
+| **Instructions & `.rodata` Constants** | Boot ROM (`ifu_rom_stub.v`) | `0x8000_0000` – `0x8000_3FFF` | Dual-Port ROM (IFU + LSU Port B) |
+| **Stack & Local Scratchpad** | VeeR Internal DCCM | `0xF004_0000` – `0xF004_FFFF` | Core-internal zero-wait SRAM |
+| **ECU Frame Staging Buffer** | On-Chip AXI SRAM (`axi_sram.v`) | `0x0600_0000` – `0x0600_FFFF` | AXI Crossbar Port M06 |
+| **Hardware AES Ciphertext** | AES-128 Output Registers | `0x0000_0024` – `0x0000_0030` | AXI Crossbar Port M00 |
+| **Incoming Sensor Telemetry** | 16550 UART RX Buffer (RBR) | `0x0300_0000` | AXI Crossbar Port M03 |
+
+---
+
+## 11. Summary of Generated Project Deliverables
+
+| Deliverable File | Location | Description |
+| :--- | :--- | :--- |
+| **Project Engineering Record** | [`project_text.md`](file:///C:/Users/PC/Downloads/project_text.md) | Complete documentation covering session logs, bug fixes, architecture, simulation telemetry, and in-depth explanations. |
+| **10-Column Comprehensive Test Plan** | [`soc_test_plan_with_control_and_data_path.xlsx`](file:///C:/Users/PC/Downloads/soc_test_plan_with_control_and_data_path.xlsx) | Master Excel test plan with distinct **Control Path** and **Data Path** columns, internal/external endpoint descriptions, and corporate styling. |
+| **9-Column Reference Matched Test Plan** | [`soc_test_plan_reference_matched.xlsx`](file:///C:/Users/PC/Downloads/soc_test_plan_reference_matched.xlsx) | Excel test plan matching [`Cryptographic_Telemetry_Gateway_SoC_Testplan.xlsx`](file:///C:/Users/PC/Downloads/Cryptographic_Telemetry_Gateway_SoC_Testplan.xlsx) column-for-column. |
+| **Original Test Plan Safety Backup** | [`soc_test_plan_backup.xlsx`](file:///C:/Users/PC/Downloads/soc_test_plan_backup.xlsx) | Original baseline spreadsheet preserved before modifications. |
+
+---
+
+## 12. Engineering Session Record (3 November 2026) — JTAG Port Decoupling, External Interface CSV Mapping, and UVM VIP Generation
+
+### 12.1 JTAG Interface Decoupling & Clean Top-Level Refactoring
+* **Context:** The Western Digital VeeR EL2 core provides native IEEE 1149.1 JTAG debug ports. In the initial integration, these ports (`jtag_id`, `jtag_tck`, `jtag_tms`, `jtag_tdi`, `jtag_tdo`) were brought out to the top-level boundary of `soc_top.v` and driven by `tb_soc_top.v`.
+* **Refactoring:** To eliminate port clutter and simplify the SoC pinout for production/thesis presentation, JTAG was decoupled from external chip boundaries:
+  - Removed JTAG ports from the `soc_top.v` port declaration.
+  - Tied off the JTAG inputs directly inside `soc_top.v` on the `u_veer` instantiation:
+    ```verilog
+    .jtag_id        (31'h1),
+    .jtag_tck       (1'b0),
+    .jtag_tms       (1'b1),        // Held permanently in Test-Logic-Reset
+    .jtag_tdi       (1'b0),
+    .jtag_tdo       (),            // Unconnected
+    .jtag_trst_n    (1'b1),
+    ```
+  - Cleaned `tb_soc_top.v` by removing all unused JTAG `reg`/`wire` signals, port bindings, and initializations.
+  - The CPU boots autonomously from Boot ROM (`0x8000_0000`) without external debug interference.
+
+### 12.2 External Interface CSV Standardization for Verification IP (VIP) Generation
+* **Context:** To generate standardized SystemVerilog UVM Verification IPs (VIPs), external interfaces were cataloged and formatted into `<signal_name>,<direction>,<width>` CSV definitions in `tb/vip/interfaces/`.
+* **Rigorous Test Plan & RTL Cross-Verification:**
+  Every signal in the CSV definitions was verified against `soc_test_plan_with_external_interface.xlsx` and `rtl/soc_top/soc_top.v`:
+  1. `uart_interface.csv`: `uart_rx_i` (input, 1), `uart_tx_o` (output, 1), `uart_irq_o` (output, 1) — matches `TC_UART_02`, `03`, `04`.
+  2. `spi_interface.csv`: `spi_clk_o` (output, 1), `spi_mosi_o` (output, 1), `spi_miso_i` (input, 1), `spi_cs_n_o` (output, 1) — matches `TC_SPI_02` (MCP2515 CAN frame dispatch).
+  3. `gpio_interface.csv`: `gpio_in_i` (input, 8), `gpio_out_o` (output, 8), `gpio_oe_o` (output, 8), `gpio_irq_o` (output, 1) — corrected from 32-bit reference to 8-bit `EF_GPIO8` matching `TC_GPIO_01`–`05`.
+  4. `systimer_interface.csv`: `timer_ctr_in_i` (input, 1), `timer_irq_o` (output, 1) — matches `TC_TMR_02`.
+  5. `dma_interface.csv`: `dma_done_o` (output, 1), `dma_error_o` (output, 1) — matches `TC_DMA_02`.
+  6. `wdt_interface.csv` & `system_interface.csv`: Preserved for VIP generator toolchain and harness compatibility.
+
+### 12.3 Automated UVM VIP Generation (`uvm_full_tb_generator.py`)
+* Executed the UVM generator toolchain (`uvm_full_tb_generator.py`) on the 5 essential SoC external interfaces.
+* Successfully generated **55 SystemVerilog UVM files** across 5 dedicated VIP directories located in `tb/vip/`:
+  - `tb/vip/uart_uvm_tb/` (11 files: interface, sequence item, driver, monitor, agent, scoreboard, env, test, package, top)
+  - `tb/vip/spi_uvm_tb/` (11 files: master interface to MCP2515 CAN with randomized MISO input)
+  - `tb/vip/gpio_uvm_tb/` (11 files: 8-bit parallel stimulus & LED monitor)
+  - `tb/vip/systimer_uvm_tb/` (11 files: timer event pulse driver & IRQ monitor)
+  - `tb/vip/dma_uvm_tb/` (11 files: transfer status & error monitoring)
+
+### 12.4 Updated Repository Verification Directory Structure
+```
+Honours_Proj/
+├── rtl/
+│   └── soc_top/soc_top.v            # JTAG decoupled and tied off internally
+├── tb/
+│   ├── soc/tb_soc_top.v             # Clean end-to-end SoC testbench (no JTAG clutter)
+│   └── vip/                         # UVM Verification IP Subsystem
+│       ├── uvm_full_tb_generator.py # Python VIP Generator Tool
+│       ├── interfaces/              # Standardized Interface CSV definitions
+│       │   ├── uart_interface.csv
+│       │   ├── spi_interface.csv
+│       │   ├── gpio_interface.csv
+│       │   ├── systimer_interface.csv
+│       │   ├── dma_interface.csv
+│       │   ├── wdt_interface.csv
+│       │   └── system_interface.csv
+│       ├── uart_uvm_tb/             # Complete UVM VIP for UART
+│       ├── spi_uvm_tb/              # Complete UVM VIP for CAN SPI Master
+│       ├── gpio_uvm_tb/             # Complete UVM VIP for EF_GPIO8
+│       ├── systimer_uvm_tb/         # Complete UVM VIP for EF_TCC32 Timer
+│       └── dma_uvm_tb/              # Complete UVM VIP for DMA Status
+├── soc_test_plan.xlsx               # Updated 27-test plan with Control/Data path
+└── docs/
+    └── soc_test_plan.xlsx           # Synchronized test plan
+```

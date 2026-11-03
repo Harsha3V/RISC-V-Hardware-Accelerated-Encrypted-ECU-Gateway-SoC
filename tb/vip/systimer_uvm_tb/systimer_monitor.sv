@@ -1,0 +1,6 @@
+class systimer_monitor extends uvm_monitor;
+virtual systimer_if vif;
+uvm_analysis_port #(systimer_item) ap;
+`uvm_component_utils(systimer_monitor)
+function new(string n,uvm_component p); super.new(n,p); ap=new("ap",this); endfunction
+endclass

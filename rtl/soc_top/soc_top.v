@@ -62,13 +62,6 @@ module soc_top #(
     input  wire [31:1]  rst_vec,        // Reset vector (e.g. 31'h4000_0000 for 0x8000_0000)
     input  wire         nmi_int,
     input  wire [31:1]  nmi_vec,
-    input  wire [31:1]  jtag_id,
-
-    // JTAG Interface
-    input  wire         jtag_tck,
-    input  wire         jtag_tms,
-    input  wire         jtag_tdi,
-    output wire         jtag_tdo,
 
     // UART External Pins
     input  wire         uart_rx_i,
@@ -339,7 +332,7 @@ el2_veer_wrapper u_veer (
     .rst_vec        (rst_vec),
     .nmi_int        (nmi_int),
     .nmi_vec        (nmi_vec),
-    .jtag_id        (jtag_id),
+    .jtag_id        (31'h1),
 
     // Trace
     .trace_rv_i_insn_ip     (),
@@ -544,11 +537,11 @@ el2_veer_wrapper u_veer (
     .dbg_bus_clk_en   (1'b1),
     .dma_bus_clk_en   (1'b1),
 
-    // JTAG
-    .jtag_tck         (jtag_tck),
-    .jtag_tms         (jtag_tms),
-    .jtag_tdi         (jtag_tdi),
-    .jtag_tdo         (jtag_tdo),
+    // JTAG (tied off internally for autonomous execution)
+    .jtag_tck         (1'b0),
+    .jtag_tms         (1'b1),
+    .jtag_tdi         (1'b0),
+    .jtag_tdo         (),
     .jtag_trst_n      (1'b1),
 
     // MPC Halt/Run Interface

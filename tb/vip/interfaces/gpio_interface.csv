@@ -1,0 +1,4 @@
+gpio_in_i,input,8
+gpio_out_o,output,8
+gpio_oe_o,output,8
+gpio_irq_o,output,1
