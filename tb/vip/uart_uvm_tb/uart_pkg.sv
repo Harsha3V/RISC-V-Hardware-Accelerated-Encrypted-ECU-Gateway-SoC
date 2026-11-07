@@ -9,5 +9,6 @@ package uart_pkg;
   `include "uart_agent.sv"
   `include "uart_scoreboard.sv"
   `include "uart_env.sv"
+  `include "uart_seq.sv"
   `include "uart_test.sv"
 endpackage

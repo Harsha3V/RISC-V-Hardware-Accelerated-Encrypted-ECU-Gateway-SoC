@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 class uart_env extends uvm_env;
   uart_agent agent;
   uart_scoreboard sb;
@@ -11,5 +13,10 @@ class uart_env extends uvm_env;
     super.build_phase(phase);
     agent = uart_agent::type_id::create("agent", this);
     sb = uart_scoreboard::type_id::create("sb", this);
+  endfunction
+
+  function void connect_phase(uvm_phase phase);
+    super.connect_phase(phase);
+    agent.mon.ap.connect(sb.item_export);
   endfunction
 endclass
