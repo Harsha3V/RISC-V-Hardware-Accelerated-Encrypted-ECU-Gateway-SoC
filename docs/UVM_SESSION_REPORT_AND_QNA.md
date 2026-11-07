@@ -220,6 +220,70 @@ uvm_config_db#(virtual uart_if)::get(this, "",           "vif", vif);
 
 ---
 
+### Category D: Automotive Gateway Architecture & ECU Plaintext Interface
+
+#### Q6: Through what interface does UART receive ECU plaintext, and how is it generated?
+
+The reception and handling of ECU plaintext occurs across three interface boundaries, bridging the external automotive network into the on-chip cryptographic engine:
+
+```mermaid
+flowchart TD
+    subgraph SENDER_ECU ["External ECU / Domain Controller (e.g., Telematics, Engine, OBD-II)"]
+        SENS["Automotive Sensors (Speed, Temp, Throttle, RPM, GPS)"]
+        MCU["ECU Microcontroller (e.g., ARM Cortex-M / Infineon AURIX)"]
+        PACKET["Plaintext Message Formatting (UDS / OBD-II / Raw Telemetry)"]
+        TX_PIN["ECU UART TX Pin"]
+        
+        SENS -->|"Analog / ADC / Digital"| MCU
+        MCU -->|"Assembles 16-byte payload"| PACKET
+        PACKET -->|"Parallel bytes to internal UART FIFO"| TX_PIN
+    end
+
+    TX_PIN -->|"Serial Wire (uart_rx_i)"| GATEWAY["Our RISC-V Encrypted Gateway SoC"]
+
+    subgraph GATEWAY ["Our Encrypted Gateway SoC (soc_top.v)"]
+        U_RX["UART RX Module (axi_uart_top)"]
+        DMA["AXI DMA Controller"]
+        AES["Hardware AES-128 Accelerator"]
+        SPI["SPI Controller"]
+        
+        U_RX -->|"AXI4-Lite Read"| DMA
+        DMA -->|"Plaintext 128-bit block"| AES
+        AES -->|"Encrypted Ciphertext"| SPI
+    end
+
+    SPI -->|"Secured CAN Frames"| CAN_BUS["Vehicle-wide CAN Network (MCP2515)"]
+```
+
+##### 1. The Three Interface Levels:
+* **Level 1: Physical / Chip-Level Interface (`uart_rx_i`)**:
+  - **Signal**: [`soc_dut.uart_rx_i`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/rtl/soc_top/soc_top.v) (1-bit input wire).
+  - **Protocol**: Asynchronous serial 8-N-1 at 115,200 baud.
+  - **Function**: An external ECU, OBD-II diagnostic tool, or vehicle telemetry modem drives unencrypted plaintext bytes serially over this physical wire.
+* **Level 2: UVM Verification Interface (`virtual uart_if vif`)**:
+  - **Interface**: [`u_uart_if.uart_rx_i`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/tb/soc_uvm/interfaces/uart_if.sv) connected to `soc_dut.uart_rx_i`.
+  - **Component**: [`uart_driver.sv`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/tb/soc_uvm/vip/uart_vip/uart_driver.sv) referencing `virtual uart_if vif`.
+  - **Function**: In testbench simulation, the UVM `uart_driver` retrieves transaction objects ([`uart_seq_item.sv`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/tb/soc_uvm/vip/uart_vip/uart_seq_item.sv)) and serializes the bits onto `vif.uart_rx_i`, emulating the external ECU transmitting plaintext.
+* **Level 3: Internal SoC Interconnect Interface (`AXI4-Lite`)**:
+  - **Module**: [`axi_uart_top.v`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/rtl/top/axi_interconnect_uart_top.v) (Slave 3 on the 2×8 AXI crossbar at base address `0x0300_0000`).
+  - **Register**: Receiver Buffer Register (`UART_RBR` at offset `0x00`).
+  - **Function**: The hardware receiver deserializes incoming bits and loads them into a 16-deep RX FIFO. The DMA Controller (or VeeR CPU) reads the plaintext over the AXI Read Data channel (`s_axi_rdata[7:0]`) and transfers it to the Hardware AES-128 Engine (`0x0400_0000`) for hardware-accelerated encryption.
+
+##### 2. How ECU Plaintext is Generated:
+* **In a Real Vehicle**:
+  1. **Source Subsystems**: An automotive sensor (wheel speed, RPM, battery management), a Telematics Control Unit (TCU with 4G/GPS), or an OBD-II diagnostic scanner reads data.
+  2. **Microcontroller Formatting**: The ECU microcontroller formats this sensor telemetry into a structured frame (e.g., UDS ISO 14229 or raw 16-byte block aligned to AES-128).
+  3. **UART Serialization**: The sender MCU writes the byte sequence to its internal UART Transmitter Holding Register (`THR`), which transmits the bits over the serial line to our SoC.
+* **In the UVM Verification Environment**:
+  1. **Sequence Generation ([`soc_virtual_sequence.sv`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/tb/soc_uvm/env/soc_virtual_sequence.sv))**: Generates plaintext bytes as directed test vectors (e.g. `'A'`, `'E'`, `'S'`, `0xA5`, `0x5A`) or constrained-random payloads.
+  2. **Transaction Item ([`uart_seq_item.sv`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/tb/soc_uvm/vip/uart_vip/uart_seq_item.sv))**: Stores the payload byte in `rand bit [7:0] data`.
+  3. **Driver Serialization ([`uart_driver.sv`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/tb/soc_uvm/vip/uart_vip/uart_driver.sv))**: Drives a Start Bit (`0`), 8 Data Bits (`data[0]` to `data[7]`), and a Stop Bit (`1`) across `vif.uart_rx_i`, matching the exact electrical timing expected by the hardware.
+
+##### 3. Architectural Purpose:
+Legacy ECUs and local sensors lack cryptographic accelerators. Transmitting plaintext over an open CAN bus exposes the vehicle to snooping and spoofing attacks. **This SoC acts as an Encrypted Gateway**: it ingests legacy plaintext over UART, encrypts it in hardware using AES-128 via DMA, and transmits the secured ciphertext over SPI to the MCP2515 CAN controller.
+
+---
+
 ## 5. Waveform Verification & Sign-off Checklist
 
 To inspect the generated waveform in Verdi:

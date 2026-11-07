@@ -746,6 +746,16 @@ Following standalone VIP validation, the full SoC-level UVM verification environ
   * Frame 5 (`0x5A` 'Z'): Driven @ 2135 ns $\rightarrow$ Captured @ 2525 ns
 * Waveform analysis in Synopsys Verdi confirmed exact matching between driver line `u_uart_if.uart_rx_i` and SoC input pad `soc_dut.uart_rx_i`.
 
+### 14.3 ECU Plaintext Interface & Data Flow Architecture
+* **Interface Levels**:
+  1. **Physical Pad Boundary**: External vehicle telemetry / diagnostic tool drives 8-N-1 serial stream into `soc_dut.uart_rx_i`.
+  2. **UVM VIP Interface**: Driven by `uart_driver.sv` via `virtual uart_if vif` (`vif.uart_rx_i`) synchronized with top-level `u_uart_if`.
+  3. **Internal SoC Interconnect**: Interconnected via AXI4-Lite slave `axi_uart_top` at `0x0300_0000`. Deserialized bytes in `UART_RBR` are read autonomously over AXI by the DMA controller and transferred to the hardware AES-128 engine at `0x0400_0000`.
+* **Plaintext Generation Context**:
+  - **Real-World Automotive**: Microcontroller in external ECU (e.g., Telematics TCU, Engine Control, or OBD-II tester) formats raw sensor telemetry or diagnostic payload into 16-byte blocks and transmits via UART.
+  - **UVM Simulation**: `soc_virtual_sequence.sv` creates and randomizes `uart_seq_item.sv` transactions (directed or random) which `uart_driver.sv` bit-bangs across the interface.
+  - **Architectural Role**: Bridges insecure/legacy external ECU plaintext into encrypted ciphertext delivered over SPI to the vehicle CAN network (MCP2515).
+
 ---
 
 ## 15. Pending Works & Strategic Verification Roadmap
