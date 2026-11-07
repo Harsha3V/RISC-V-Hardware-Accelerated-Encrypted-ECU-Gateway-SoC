@@ -5,9 +5,11 @@
 
 [![Language](https://img.shields.io/badge/Language-Verilog%20%2F%20SystemVerilog-blue)]()
 [![Simulator](https://img.shields.io/badge/Simulator-Synopsys%20VCS%202023.03-orange)]()
+[![Verification](https://img.shields.io/badge/Verification-IEEE%201800.2%20UVM%201.2-blueviolet)]()
+[![Waveform](https://img.shields.io/badge/Waveform-Synopsys%20Verdi%20FSDB-purple)]()
 [![ISA](https://img.shields.io/badge/ISA-RISC--V%20RV32IMC-green)]()
 [![Bus](https://img.shields.io/badge/Bus-AXI4-purple)]()
-[![Status](https://img.shields.io/badge/Status-In%20Progress-yellow)]()
+[![Status](https://img.shields.io/badge/SoC%20UVM%20Harness-Steps%201--5%20PASS-brightgreen)]()
 
 ---
 
