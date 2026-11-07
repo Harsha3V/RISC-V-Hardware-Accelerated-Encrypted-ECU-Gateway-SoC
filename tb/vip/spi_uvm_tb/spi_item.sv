@@ -7,5 +7,7 @@ class spi_item extends uvm_sequence_item;
 
   `uvm_object_utils(spi_item)
 
-  function new(string name="spi_item"); super.new(name); endfunction
+  function new(string name="spi_item");
+    super.new(name);
+  endfunction
 endclass

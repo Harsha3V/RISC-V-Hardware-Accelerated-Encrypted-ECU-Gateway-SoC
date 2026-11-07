@@ -5,5 +5,7 @@ class systimer_item extends uvm_sequence_item;
 
   `uvm_object_utils(systimer_item)
 
-  function new(string name="systimer_item"); super.new(name); endfunction
+  function new(string name="systimer_item");
+    super.new(name);
+  endfunction
 endclass

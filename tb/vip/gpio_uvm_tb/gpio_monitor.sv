@@ -1,6 +1,15 @@
 class gpio_monitor extends uvm_monitor;
-virtual gpio_if vif;
-uvm_analysis_port #(gpio_item) ap;
-`uvm_component_utils(gpio_monitor)
-function new(string n,uvm_component p); super.new(n,p); ap=new("ap",this); endfunction
+  virtual gpio_if vif;
+  uvm_analysis_port #(gpio_item) ap;
+  `uvm_component_utils(gpio_monitor)
+
+  function new(string n, uvm_component p);
+    super.new(n, p);
+    ap = new("ap", this);
+  endfunction
+
+  function void build_phase(uvm_phase phase);
+    super.build_phase(phase);
+    void'(uvm_config_db#(virtual gpio_if)::get(this, "", "vif", vif));
+  endfunction
 endclass

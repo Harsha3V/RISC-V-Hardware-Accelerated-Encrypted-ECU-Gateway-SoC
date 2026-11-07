@@ -657,8 +657,68 @@ Honours_Proj/
 │       ├── spi_uvm_tb/              # Complete UVM VIP for CAN SPI Master
 │       ├── gpio_uvm_tb/             # Complete UVM VIP for EF_GPIO8
 │       ├── systimer_uvm_tb/         # Complete UVM VIP for EF_TCC32 Timer
-│       └── dma_uvm_tb/              # Complete UVM VIP for DMA Status
+│       ├── dma_uvm_tb/              # Complete UVM VIP for DMA Status
+│       ├── top_vip_tb/              # Integrated Top-Level Multi-VIP Environment
+│       │   ├── top_vip_pkg.sv       # Multi-agent VIP environment & test package
+│       │   ├── tb_vip_top.sv        # Top module binding 5 interfaces to 100MHz clock/reset
+│       │   └── run_top_vip.sh       # VCS compilation & simulation script
+│       └── run_all_vips.sh          # Automated regression script running all 5 VIPs
 ├── soc_test_plan.xlsx               # Updated 27-test plan with Control/Data path
 └── docs/
     └── soc_test_plan.xlsx           # Synchronized test plan
 ```
+
+---
+
+## 13. Engineering Session Record (7 November 2026) — UVM VIP Compilation Fixes, Regression Automation, and Integrated Top VIP Testbench Verification
+
+### 13.1 Root Cause Diagnosis & VIP Generator Refactoring
+* **Problem:** Compiling the generated VIP packages under Synopsys VCS U-2023.03 with `-ntb_opts uvm-1.2` produced compilation error `Error-[MFNF] Member not found ... Could not find member 'clk' in interface '<vip>_if'`.
+* **Root Cause:**
+  1. The interface CSV definitions (`tb/vip/interfaces/*.csv`) listed only external chip-boundary I/O signals and omitted `clk` and `rst_n`.
+  2. The generated drivers referenced `vif.clk` (`@(posedge vif.clk)`), failing compilation because `clk` was not a member of the interface.
+  3. The initial `tb_top.sv` templates lacked clock/reset generation and did not set virtual interfaces into `uvm_config_db`.
+* **Generator Enhancements (`tb/vip/uvm_full_tb_generator.py`):**
+  - Updated interface templates to automatically inject synchronous clock and reset ports: `interface <vip>_if(input logic clk, input logic rst_n);`.
+  - Added safe `uvm_config_db#(virtual <vip>_if)::get()` lookups in driver and monitor `build_phase`.
+  - Added 100 MHz clock and reset generation in `tb_top.sv`, registering virtual interfaces into `uvm_config_db` before calling `run_test()`.
+  - Updated `test` templates with UVM objection handling (`phase.raise_objection()` / `phase.drop_objection()`) and execution delay.
+  - Regenerated all 5 standalone VIP suites (UART, SPI, GPIO, Systimer, DMA).
+
+### 13.2 Development of Integrated Top UVM VIP Testbench (`top_vip_tb`)
+* Created dedicated multi-agent verification environment under `tb/vip/top_vip_tb/`:
+  - **`top_vip_pkg.sv`**: Defines `top_vip_env` which instantiates and configures all 5 VIP agents (`uart_agent`, `spi_agent`, `gpio_agent`, `systimer_agent`, `dma_agent`). Defines `top_vip_test` to orchestrate concurrent multi-agent execution.
+  - **`tb_vip_top.sv`**: Top-level module providing a unified 100 MHz clock and power-on reset generator, instantiating all 5 physical interfaces (`u_uart_if`, `u_spi_if`, `u_gpio_if`, `u_systimer_if`, `u_dma_if`), and publishing them via `uvm_config_db`.
+  - **`run_top_vip.sh`**: Standalone execution script invoking Synopsys VCS with `-ntb_opts uvm-1.2`, include directories, and waveform compilation.
+
+### 13.3 Synopsys VCS Verification Results
+* **Integrated Top VIP Testbench (`tb_vip_top`):**
+  - Compiled and executed cleanly in VCS U-2023.03.
+  - Live simulation log report:
+    ```
+    ==================================================
+     Integrated Top VIP Testbench Started
+     Concurrently Verifying 5 UVM VIP Agents:
+       1. UART VIP Agent
+       2. SPI CAN Master VIP Agent
+       3. GPIO VIP Agent
+       4. System Timer VIP Agent
+       5. DMA Engine VIP Agent
+    ==================================================
+    UVM_INFO top_vip_pkg.sv @ 500000: uvm_test_top [top_vip_test] >>> ALL 5 UVM VIP Agents Ran Successfully & Verified! <<<
+    --- UVM Report Summary ---
+    UVM_INFO :   13
+    UVM_WARNING :    0
+    UVM_ERROR :    0
+    UVM_FATAL :    0
+    ```
+  - Result: **PASSED (0 Errors, 0 Warnings)**.
+* **Full VIP Regression Suite (`run_all_vips.sh`):**
+  - Automated execution of all 5 standalone VIP packages:
+    - `uart_uvm_tb`: **PASSED** (0 Errors, 0 Warnings)
+    - `spi_uvm_tb`: **PASSED** (0 Errors, 0 Warnings)
+    - `gpio_uvm_tb`: **PASSED** (0 Errors, 0 Warnings)
+    - `systimer_uvm_tb`: **PASSED** (0 Errors, 0 Warnings)
+    - `dma_uvm_tb`: **PASSED** (0 Errors, 0 Warnings)
+  - Regression Summary: **5 / 5 PASSED**.
+
