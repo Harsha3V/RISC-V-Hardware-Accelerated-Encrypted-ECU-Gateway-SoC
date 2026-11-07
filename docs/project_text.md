@@ -722,3 +722,81 @@ Honours_Proj/
     - `dma_uvm_tb`: **PASSED** (0 Errors, 0 Warnings)
   - Regression Summary: **5 / 5 PASSED**.
 
+
+
+---
+
+## 14. Engineering Session Record (7 November 2026, Part 2) — SoC-Level UVM Verification Integration (Steps 1–5) and Live Interface Transactions
+
+### 14.1 Overview of Completed Scope (Steps 1–5)
+Following standalone VIP validation, the full SoC-level UVM verification environment was constructed and integrated with the synthesis-ready SoC RTL:
+1. **SoC UVM Hierarchy**: Developed [`soc_test.sv`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/tb/soc_uvm/env/soc_test.sv), [`soc_env.sv`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/tb/soc_uvm/env/soc_env.sv), [`soc_config.sv`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/tb/soc_uvm/env/soc_config.sv), [`soc_virtual_sequencer.sv`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/tb/soc_uvm/env/soc_virtual_sequencer.sv), and [`soc_virtual_sequence.sv`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/tb/soc_uvm/env/soc_virtual_sequence.sv) under package [`soc_uvm_pkg.sv`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/tb/soc_uvm/env/soc_uvm_pkg.sv).
+2. **Actual SoC RTL DUT**: Instantiated [`soc_top.v`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/rtl/soc_top/soc_top.v) (Western Digital VeeR EL2 core + 2x8 AXI4 crossbar + 7 IP cores) as `soc_dut` inside [`tb_soc_uvm_top.sv`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/tb/soc_uvm/tb/tb_soc_uvm_top.sv).
+3. **Five SystemVerilog Interfaces**: Implemented `uart_if`, `spi_if`, `gpio_if`, `systimer_if`, and `dma_if` with synchronous clocking blocks (`drv_cb`, `mon_cb`) and modports (`DRV`, `MON`), wired directly to `soc_dut` pins.
+4. **VIP Agent Integration**: Integrated all 5 VIP agents (`uart_agent`, `spi_agent`, `gpio_agent`, `systimer_agent`, `dma_agent`) into `soc_env` and connected their sequencers to `soc_virtual_sequencer`.
+5. **Compilation & Elaboration Check**: Compiled clean using Synopsys VCS U-2023.03 and UVM-1.2. Simulation confirmed clean topology printout with **0 Errors, 0 Warnings, 0 Fatals**.
+
+### 14.2 Live UART VIP Driver-to-SoC Interface Verification
+* Triggered virtual sequence `soc_uart_tx_vseq` sending 5 test frames (`0x41` 'A', `0x45` 'E', `0x53` 'S', `0xA5`, `0x5A` 'Z') from the VIP driver.
+* Monitored signals in simulation log and Verdi FSDB (`dump_soc_uvm.fsdb`):
+  * Frame 1 (`0x41` 'A'): Driven @ 300 ns $\rightarrow$ Captured @ 685 ns
+  * Frame 2 (`0x45` 'E'): Driven @ 755 ns $\rightarrow$ Captured @ 1145 ns
+  * Frame 3 (`0x53` 'S'): Driven @ 1215 ns $\rightarrow$ Captured @ 1605 ns
+  * Frame 4 (`0xA5`): Driven @ 1675 ns $\rightarrow$ Captured @ 2065 ns
+  * Frame 5 (`0x5A` 'Z'): Driven @ 2135 ns $\rightarrow$ Captured @ 2525 ns
+* Waveform analysis in Synopsys Verdi confirmed exact matching between driver line `u_uart_if.uart_rx_i` and SoC input pad `soc_dut.uart_rx_i`.
+
+---
+
+## 15. Pending Works & Strategic Verification Roadmap
+
+With the complete SoC-level UVM testbench operational and interface driving verified, the pending engineering tasks are categorized into three strategic phases:
+
+```
++---------------------------------------------------------------------------------------------------+
+|                                   PENDING WORKS ROADMAP                                           |
++---------------------------------------------------------------------------------------------------+
+|                                                                                                   |
+|  [PHASE 1: High Priority]           [PHASE 2: Medium Priority]          [PHASE 3: Final Sign-off] |
+|  Peripheral Functional Checks       Cross-Peripheral Scenarios          Firmware & Coverage       |
+|                                                                                                   |
+|  * 1.1 UART Baud Rate Latching      * 2.1 Autonomous Gateway Pipeline   * 3.1 C Application (ROM) |
+|        (868 cycles -> data_o)             (UART->DMA->AES->DMA->SPI)          (sw/app/main.c)     |
+|  * 1.2 GPIO Pattern Driving/Sampling* 2.2 Coordinated Virtual Sequences * 3.2 UVM Functional Cov  |
+|  * 1.3 SPI CAN Master/Slave Checks  * 2.3 Comprehensive Error Injection * 3.3 SVA Protocol Checks |
+|  * 1.4 System Timer Period/IRQ      * 2.4 End-to-End Scoreboarding      * 3.4 Final Project Thesis|
+|  * 1.5 DMA Handshake & Interrupts                                                                 |
+|                                                                                                   |
++---------------------------------------------------------------------------------------------------+
+```
+
+### Phase 1: High Priority — Peripheral Hardware Latching & Verification
+
+| Task | Module | Technical Action Item | Target Verification Artifact |
+| :---: | :--- | :--- | :--- |
+| **1.1** | **UART Hardware Latching** | Align `uart_driver` bit period from 4 cycles to **868 clock cycles** ($100\,\text{MHz} / 115{,}200\,\text{baud} = 868\,\text{cycles}$). Allows the internal hardware oversampling FSM in `uart_receiver_inst` to latch incoming bytes into `rx_data_o[7:0]` and assert `uart_irq_o`. | Verdi waveform showing `rx_data_o` updating to `0x41`, `0x45`, `0x53`, `0xA5`, `0x5A` alongside `rx_valid_o = 1`. |
+| **1.2** | **GPIO VIP Verification** | 1. Drive 8-bit walking 1s and walking 0s patterns from `gpio_driver` on `gpio_in_i` $\rightarrow$ verify `soc_dut.gpio_in_i` and internal `EF_GPIO8` `DATAI` register.<br>2. Drive outputs from SoC $\rightarrow$ sample via `gpio_monitor` and verify pin direction `gpio_oe_o`. | UVM Scoreboard log showing data match and zero pin contention. |
+| **1.3** | **SPI CAN VIP Verification** | 1. Enable SoC SPI Master $\rightarrow$ configure `spi_driver` as MCP2515 CAN controller slave response.<br>2. Verify Mode 0 (CPOL=0, CPHA=0) transmission on `spi_clk_o`, `spi_mosi_o`, `spi_miso_i`, and active-low chip select `spi_cs_n_o`. | Full-duplex byte verification in Verdi waveform and SPI monitor analysis port. |
+| **1.4** | **System Timer VIP** | 1. Verify 32-bit down-counter decrement and period reload on EF_TCC32 timer IP.<br>2. Verify periodic interrupt generation on `timer_irq_o`. | Waveform check of heartbeat interrupt period and timer counter value. |
+| **1.5** | **DMA VIP Verification** | 1. Verify AXI DMA transfer request and grant handshakes on `dma_req` / `dma_ack`.<br>2. Monitor transfer status interrupts `dma_done_o` and `dma_error_o`. | Verification of autonomous multi-word transfer completion without CPU intervention. |
+
+---
+
+### Phase 2: Medium Priority — Cross-Peripheral Virtual Sequences & Scenarios
+
+| Task | Target Scenario | Architectural Implementation | Target Deliverable |
+| :---: | :--- | :--- | :--- |
+| **2.1** | **Autonomous ECU Gateway Pipeline** | Complete end-to-end verification of the core project pipeline:<br>1. Plaintext ECU payload arrives via UART.<br>2. DMA autonomously transfers payload from UART FIFO to AES-128 engine.<br>3. Hardware AES engine performs 10-round cipher encryption.<br>4. DMA autonomously transfers ciphertext from AES engine to SPI Master.<br>5. SPI Master transmits encrypted CAN frame to MCP2515.<br>6. CPU supervises status via interrupts without touching payload data. | Virtual sequence in [`soc_virtual_sequence.sv`](file:///home/student/Documents/RISC-V-Hardware-Accelerated-Encrypted-ECU-Gateway-SoC/tb/soc_uvm/env/soc_virtual_sequence.sv) executing full autonomous flow. |
+| **2.2** | **Multi-Peripheral Concurrency** | Concurrently drive UART incoming traffic, timer heartbeat, and GPIO status LEDs while DMA and AES are active to verify AXI4 arbiter fairness and priority encoder under heavy load. | Arbiter latency check and zero buffer overflow/underrun. |
+| **2.3** | **Error Injection & Fault Handling** | 1. Inject UART framing errors (corrupt stop bit) $\rightarrow$ verify error status.<br>2. Inject SPI bus timeout $\rightarrow$ verify recovery.<br>3. Attempt invalid memory-mapped access to tied-off AXI slots (M06/M07) $\rightarrow$ verify `SLVERR` response. | Negative test cases in `soc_test.sv` confirming graceful fault handling. |
+
+---
+
+### Phase 3: Final Phase — Firmware Integration, Coverage & Project Sign-off
+
+| Task | Milestone | Action Item | Target Deliverable |
+| :---: | :--- | :--- | :--- |
+| **3.1** | **Embedded C Firmware Application** | Complete `sw/app/main.c` firmware to be compiled into `boot.hex`:<br>- Initialize UART, Timer, SPI, and AES registers.<br>- Configure DMA descriptors (source, destination, byte length).<br>- Put VeeR CPU into wait-for-interrupt (WFI) low-power sleep during autonomous transfers. | Bootable ROM image `boot.hex` executing autonomous gateway pipeline. |
+| **3.2** | **UVM Functional Coverage** | 1. Define `covergroup` objects covering peripheral register address spaces, operation modes, and payload byte distributions.<br>2. Generate unified coverage database (`.vdb`) using VCS `-cm line+cond+fsm+branch+tgl`. | Formal coverage report targeting $\ge 95\%$ functional coverage. |
+| **3.3** | **SystemVerilog Assertions (SVA)** | 1. AXI4 protocol assertions: check `VALID` / `READY` handshake rules, burst length boundaries, and address alignments.<br>2. Interface timing assertions: verify setup/hold times and interrupt pulse widths. | Zero assertion violations in simulation log and Verdi SVA panel. |
+| **3.4** | **Thesis Documentation & Presentation** | Compile final engineering data, simulation transcripts, waveform screenshots, and architecture diagrams into the Honours Final Year Project Thesis and defense slides. | Complete Honours Project Thesis & Defense Deliverables. |
