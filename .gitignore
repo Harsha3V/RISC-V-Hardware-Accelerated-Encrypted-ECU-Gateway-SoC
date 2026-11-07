@@ -71,3 +71,4 @@ desktop.ini
 # ----- Keep empty folders tracked -----
 !**/.gitkeep
 vcd2fsdbLog/
+run/
